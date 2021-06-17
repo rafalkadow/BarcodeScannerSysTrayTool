@@ -1,5 +1,5 @@
 # BarcodeScannerSysTrayTool
-A sample Winforms application - barcode scanner changes.
+A sample Winforms application - barcode scanner changes data.
 
 ## Screenshots
 <div align="center">
