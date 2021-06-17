@@ -1,0 +1,2 @@
+# BarcodeScannerSysTrayTool
+A winforms application
