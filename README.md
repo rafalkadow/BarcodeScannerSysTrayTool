@@ -1,5 +1,5 @@
 # BarcodeScannerSysTrayTool
-A sample Winforms application - barcode scanner changes data.
+Sample Winforms application - for barcode scanner to changing data and perform operations.
 
 ## Screenshots
 <div align="center">
@@ -13,3 +13,8 @@ A sample Winforms application - barcode scanner changes data.
 # Microsoft Visual Studio Installer Projects
 
 https://marketplace.visualstudio.com/items?itemName=VisualStudioClient.MicrosoftVisualStudio2017InstallerProjects
+
+OR
+
+# Microsoft Visual Studio Installer Projects Visual Studio 2022
+https://marketplace.visualstudio.com/items?itemName=VisualStudioClient.MicrosoftVisualStudio2022InstallerProjects
