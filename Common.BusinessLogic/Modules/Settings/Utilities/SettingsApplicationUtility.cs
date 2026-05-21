@@ -5,6 +5,7 @@ using Common.Utilities.Models;
 using System;
 using System.Collections.Generic;
 using System.Configuration;
+using System.Globalization;
 
 namespace Common.BusinessLogic.Modules.Settings.Utilities
 {
@@ -13,6 +14,23 @@ namespace Common.BusinessLogic.Modules.Settings.Utilities
         
         private static NLog.Logger logger = NLog.LogManager.GetCurrentClassLogger();
 
+        private static double ParseDelay(string value)
+        {
+            if (double.TryParse(value, NumberStyles.Float, CultureInfo.CurrentCulture, out double result))
+            {
+                return result;
+            }
+
+            string normalized = value?.Replace(',', '.');
+            if (double.TryParse(normalized, NumberStyles.Float, CultureInfo.InvariantCulture, out result))
+            {
+                return result;
+            }
+
+            logger.Warn("Could not parse delay value '{0}', using 0", value);
+            return 0;
+        }
+
         #region SaveSettingsElements
         public ResponseOperation SaveSettingsElements(SettingsApplicationModel settingsApplicationModel)
         {
@@ -20,16 +38,22 @@ namespace Common.BusinessLogic.Modules.Settings.Utilities
             ResponseOperation responseOperation = new ResponseOperation();
             try
             {
+                if (string.IsNullOrWhiteSpace(settingsApplicationModel?.ExecutablePath))
+                {
+                    responseOperation.Exception = "ExecutablePath is required to save settings.";
+                    return responseOperation;
+                }
+
                 Configuration config = ConfigurationManager.OpenExeConfiguration(settingsApplicationModel.ExecutablePath);
 
                 config.AppSettings.Settings.Remove(SettingsApplicationConstants.Delay1);
-                config.AppSettings.Settings.Add(SettingsApplicationConstants.Delay1, settingsApplicationModel.Delay1.ToString());
+                config.AppSettings.Settings.Add(SettingsApplicationConstants.Delay1, settingsApplicationModel.Delay1.ToString(CultureInfo.InvariantCulture));
 
                 config.AppSettings.Settings.Remove(SettingsApplicationConstants.Delay2);
-                config.AppSettings.Settings.Add(SettingsApplicationConstants.Delay2, settingsApplicationModel.Delay2.ToString());
+                config.AppSettings.Settings.Add(SettingsApplicationConstants.Delay2, settingsApplicationModel.Delay2.ToString(CultureInfo.InvariantCulture));
 
                 config.AppSettings.Settings.Remove(SettingsApplicationConstants.Delay3);
-                config.AppSettings.Settings.Add(SettingsApplicationConstants.Delay3, settingsApplicationModel.Delay3.ToString());
+                config.AppSettings.Settings.Add(SettingsApplicationConstants.Delay3, settingsApplicationModel.Delay3.ToString(CultureInfo.InvariantCulture));
 
                 config.AppSettings.Settings.Remove(SettingsApplicationConstants.AskedClosing);
                 config.AppSettings.Settings.Add(SettingsApplicationConstants.AskedClosing, settingsApplicationModel.AskedClosing.ToString());
@@ -110,11 +134,8 @@ namespace Common.BusinessLogic.Modules.Settings.Utilities
                     AskedClosing = "false";
                 }
 
-                bool parsedValueAskedClosing;
-                if (Boolean.TryParse(AskedClosing, out parsedValueAskedClosing))
-                {
-                   
-                }
+                bool parsedValueAskedClosing = false;
+                Boolean.TryParse(AskedClosing, out parsedValueAskedClosing);
 
                 //<!--------------------------------------------------------------------------------------
                 string IsPasswordOnApplication = string.Empty;
@@ -127,11 +148,8 @@ namespace Common.BusinessLogic.Modules.Settings.Utilities
                     IsPasswordOnApplication = "false";
                 }
 
-                bool parsedValueIsPasswordOnApplication;
-                if (Boolean.TryParse(IsPasswordOnApplication, out parsedValueIsPasswordOnApplication))
-                {
-
-                }
+                bool parsedValueIsPasswordOnApplication = false;
+                Boolean.TryParse(IsPasswordOnApplication, out parsedValueIsPasswordOnApplication);
 
                 string PasswordSettings;
                 if (config.AppSettings.Settings[SettingsApplicationConstants.PasswordSettings] != null)
@@ -186,7 +204,6 @@ namespace Common.BusinessLogic.Modules.Settings.Utilities
                                 result += "~";
                             }
 
-                            var tagValue = item;
                             result += item.Guid + "|" + item.NamePattern + "|" + item.PatternValue + "|" + item.DefineTheSequence;
                         }
                         PatternRegexCollection = result;
@@ -220,15 +237,14 @@ namespace Common.BusinessLogic.Modules.Settings.Utilities
                             result += "~";
                         }
 
-                        var tagValue = item;
                         result += item.Guid + "|" + item.NamePattern + "|" + item.PatternValue + "|" + item.DefineTheSequence;
                     }
                     PatternRegexCollection = result;                    
                 }
 
-                settingsApplicationModel.Delay1 = Convert.ToDouble(Delay1);
-                settingsApplicationModel.Delay2 = Convert.ToDouble(Delay2);
-                settingsApplicationModel.Delay3 = Convert.ToDouble(Delay3);
+                settingsApplicationModel.Delay1 = ParseDelay(Delay1);
+                settingsApplicationModel.Delay2 = ParseDelay(Delay2);
+                settingsApplicationModel.Delay3 = ParseDelay(Delay3);
 
                 settingsApplicationModel.PasswordSettings = ApplicationEncrypterDecrypt.Decrypt(PasswordSettings);
                 settingsApplicationModel.AskedClosing = parsedValueAskedClosing;
@@ -270,7 +286,7 @@ namespace Common.BusinessLogic.Modules.Settings.Utilities
             }
             catch (Exception ex)
             {
-                logger.Fatal("LoadDataForm(ex='{0}')", ex.StackTrace);
+                logger.Fatal(ex, "LoadDataSettings failed");
             }
             return settingsApplicationModel;
         }

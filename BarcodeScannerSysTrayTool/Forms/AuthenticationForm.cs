@@ -33,8 +33,9 @@ namespace BarcodeScannerSysTrayTool.Forms
                     this.Hide();
                     isSettingsLoaded = true;
                     settingsForm.LoadDataForm();
-                    settingsForm.FormClosing += SettingsForm_FormClosing; ;      
+                    settingsForm.FormClosing += SettingsForm_FormClosing;
                     settingsForm.ShowDialog();
+                    settingsForm.FormClosing -= SettingsForm_FormClosing;
                    
                     
                 }

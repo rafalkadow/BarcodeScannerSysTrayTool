@@ -1,77 +1,90 @@
 ﻿using NLog;
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace Common.BusinessLogic.Utilities
 {
     public class ApplicationEncrypterDecrypt
     {
-        private static Logger logger = LogManager.GetCurrentClassLogger();
-        private static string publickey = "12345678";
-        private static string secretkey = "87654321";
+        private static readonly Logger logger = LogManager.GetCurrentClassLogger();
+        private static readonly byte[] PublicKeyBytes = Encoding.UTF8.GetBytes("12345678");
+        private static readonly byte[] SecretKeyBytes = Encoding.UTF8.GetBytes("87654321");
+
         public static string Encrypt(string textToEncrypt)
         {
-            string toReturn = "";
+            if (string.IsNullOrEmpty(textToEncrypt))
+            {
+                return string.Empty;
+            }
+
             try
             {
-                byte[] secretkeyByte = { };
-                secretkeyByte = System.Text.Encoding.UTF8.GetBytes(secretkey);
-                byte[] publickeybyte = { };
-                publickeybyte = System.Text.Encoding.UTF8.GetBytes(publickey);
-                MemoryStream ms = null;
-                CryptoStream cs = null;
-                byte[] inputbyteArray = System.Text.Encoding.UTF8.GetBytes(textToEncrypt);
-                using (DESCryptoServiceProvider des = new DESCryptoServiceProvider())
+                byte[] inputBytes = Encoding.UTF8.GetBytes(textToEncrypt);
+                using (var des = new DESCryptoServiceProvider())
+                using (var ms = new MemoryStream())
+                using (var cs = new CryptoStream(ms, des.CreateEncryptor(PublicKeyBytes, SecretKeyBytes), CryptoStreamMode.Write))
                 {
-                    ms = new MemoryStream();
-                    cs = new CryptoStream(ms, des.CreateEncryptor(publickeybyte, secretkeyByte), CryptoStreamMode.Write);
-                    cs.Write(inputbyteArray, 0, inputbyteArray.Length);
+                    cs.Write(inputBytes, 0, inputBytes.Length);
                     cs.FlushFinalBlock();
-                    toReturn = Convert.ToBase64String(ms.ToArray());
+                    return Convert.ToBase64String(ms.ToArray());
                 }
-                return toReturn;
             }
             catch (Exception ex)
             {
-                logger.Error($"Encrypt(ex='{ex.ToString()}')");
+                logger.Error(ex, "Encrypt failed");
+                return string.Empty;
             }
-            return toReturn;
         }
 
         public static string Decrypt(string textToDecrypt)
         {
-            string toReturn = "";
+            if (string.IsNullOrEmpty(textToDecrypt))
+            {
+                return string.Empty;
+            }
+
+            if (!LooksLikeEncryptedValue(textToDecrypt))
+            {
+                return textToDecrypt;
+            }
+
             try
             {
-                byte[] privatekeyByte = { };
-                privatekeyByte = System.Text.Encoding.UTF8.GetBytes(secretkey);
-                byte[] publickeybyte = { };
-                publickeybyte = System.Text.Encoding.UTF8.GetBytes(publickey);
-                MemoryStream ms = null;
-                CryptoStream cs = null;
-                byte[] inputbyteArray = new byte[textToDecrypt.Replace(" ", "+").Length];
-                inputbyteArray = Convert.FromBase64String(textToDecrypt.Replace(" ", "+"));
-                using (DESCryptoServiceProvider des = new DESCryptoServiceProvider())
+                byte[] inputBytes = Convert.FromBase64String(textToDecrypt.Replace(" ", "+"));
+                using (var des = new DESCryptoServiceProvider())
+                using (var ms = new MemoryStream())
+                using (var cs = new CryptoStream(ms, des.CreateDecryptor(PublicKeyBytes, SecretKeyBytes), CryptoStreamMode.Write))
                 {
-                    ms = new MemoryStream();
-                    cs = new CryptoStream(ms, des.CreateDecryptor(publickeybyte, privatekeyByte), CryptoStreamMode.Write);
-                    cs.Write(inputbyteArray, 0, inputbyteArray.Length);
+                    cs.Write(inputBytes, 0, inputBytes.Length);
                     cs.FlushFinalBlock();
-                    Encoding encoding = Encoding.UTF8;
-                    toReturn = encoding.GetString(ms.ToArray());
+                    return Encoding.UTF8.GetString(ms.ToArray());
                 }
-                return toReturn;
             }
             catch (Exception ex)
             {
-                logger.Error($"Decrypt(ex='{ex.ToString()}')");
+                logger.Error(ex, "Decrypt failed");
+                return string.Empty;
             }
-            return toReturn;
+        }
+
+        private static bool LooksLikeEncryptedValue(string value)
+        {
+            if (value.Length < 12 || value.Length % 4 != 0)
+            {
+                return false;
+            }
+
+            try
+            {
+                byte[] data = Convert.FromBase64String(value.Replace(" ", "+"));
+                return data.Length >= 8;
+            }
+            catch (FormatException)
+            {
+                return false;
+            }
         }
     }
 }

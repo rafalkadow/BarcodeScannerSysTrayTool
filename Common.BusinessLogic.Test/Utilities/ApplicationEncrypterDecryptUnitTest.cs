@@ -26,7 +26,21 @@ namespace Common.BusinessLogic.Test.Utilities
             string resultEncrypt = ApplicationEncrypterDecrypt.Encrypt(message);
             string resultDescrypt = ApplicationEncrypterDecrypt.Decrypt(resultEncrypt);
             Assert.IsNotNull(resultDescrypt);
-            Assert.IsTrue(resultDescrypt.Equals(message));
+            Assert.AreEqual(message, resultDescrypt);
+        }
+
+        [TestMethod]
+        public void Decrypt_ReturnsPlaintext_WhenValueIsNotEncrypted()
+        {
+            const string plaintextPassword = "Password";
+            Assert.AreEqual(plaintextPassword, ApplicationEncrypterDecrypt.Decrypt(plaintextPassword));
+        }
+
+        [TestMethod]
+        public void Encrypt_ReturnsEmpty_ForNullOrEmptyInput()
+        {
+            Assert.AreEqual(string.Empty, ApplicationEncrypterDecrypt.Encrypt(null));
+            Assert.AreEqual(string.Empty, ApplicationEncrypterDecrypt.Encrypt(string.Empty));
         }
     }
 }

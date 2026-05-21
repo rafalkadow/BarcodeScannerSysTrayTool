@@ -4,7 +4,6 @@ using Common.BusinessLogic.Modules.Settings.Utilities;
 using Common.BusinessModels.Modules.Models;
 using System;
 using System.Collections.Generic;
-using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Windows.Forms;
@@ -52,7 +51,7 @@ namespace BarcodeScannerSysTrayTool.ApplicationElements
             }
             catch (Exception ex)
             {
-                logger.Fatal("LoadDataForm(ex='{0}')", ex.StackTrace);
+                logger.Fatal(ex, "LoadDataForm failed");
             }
         }
         
@@ -68,9 +67,7 @@ namespace BarcodeScannerSysTrayTool.ApplicationElements
             notifyIconObject.Visible = true;
 
             HookManager.KeyPress += HookManager_KeyPress;
-
             HookManager.KeyUp += HookManager_KeyUp;
-            HookManager.KeyDown += HookManager_KeyDown;
 
             settingsForm = new SettingsForm();
             settingsForm.SettingsApplicationModelConfirmOk += SettingsApplicationModel_ConfirmEvent;
@@ -86,25 +83,10 @@ namespace BarcodeScannerSysTrayTool.ApplicationElements
                 e.Handled = true;
                 HookManager.KeyUp -= HookManager_KeyUp;
                 HookManager.KeyPress -= HookManager_KeyPress;
-                HookManager.KeyDown -= HookManager_KeyDown; 
-                //Thread.Sleep(1000);
                 StartSending(barcode);
-
-                barcode = string.Empty;
-                resultOperation = false;
+                ResetBarcodeState();
                 HookManager.KeyUp += HookManager_KeyUp;
                 HookManager.KeyPress += HookManager_KeyPress;
-                HookManager.KeyDown += HookManager_KeyDown;
-            }
-        }
-
-        private void HookManager_KeyDown(object sender, KeyEventArgs e)
-        {
-            logger.Info("HookManager_KeyDown(e.KeyCode='{0}', e.Alt='{1}', e.Control='{2}', e.Modifiers='{3}', e.Shift='{4}', e.SuppressKeyPress='{5}', Control.ModifierKeys='{6}',)", e.KeyCode, e.Alt, e.Control, e.Modifiers, e.Shift, e.SuppressKeyPress, Control.ModifierKeys);
-            
-            if (e.KeyData.Equals(Keys.F2) || e.KeyData.Equals(Keys.Alt) || Control.ModifierKeys == Keys.Alt)
-            {
-                logger.Info("HookManager_KeyDown2(e.KeyCode='{0}')", e.KeyCode);
             }
         }
 
@@ -113,77 +95,91 @@ namespace BarcodeScannerSysTrayTool.ApplicationElements
             SettingsApplicationModelApplication = settingsApplicationModel;
         }
      
+        private void ResetBarcodeState()
+        {
+            barcode = string.Empty;
+            resultOperation = false;
+            defineTheSequencePatternBarcode = string.Empty;
+        }
+
+        private bool TryMatchConfiguredPatterns(string value, out string defineTheSequence)
+        {
+            defineTheSequence = string.Empty;
+            var patterns = SettingsApplicationModelApplication?.PatternRegexList;
+            if (patterns == null || patterns.Count == 0)
+            {
+                return false;
+            }
+
+            foreach (var pattern in patterns)
+            {
+                if (string.IsNullOrEmpty(pattern?.PatternValue))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    if (Regex.IsMatch(value, pattern.PatternValue, RegexOptions.None, TimeSpan.FromSeconds(1)))
+                    {
+                        defineTheSequence = pattern.DefineTheSequence ?? string.Empty;
+                        return true;
+                    }
+                }
+                catch (RegexMatchTimeoutException ex)
+                {
+                    logger.Warn(ex, "Pattern match timeout for '{0}'", pattern.NamePattern);
+                }
+                catch (ArgumentException ex)
+                {
+                    logger.Warn(ex, "Invalid regex for pattern '{0}'", pattern.NamePattern);
+                }
+            }
+
+            return false;
+        }
+
         private void HookManager_KeyPress(object sender, KeyPressEventArgs e)
-        {        
+        {
             try
             {
-                logger.Info("HookManager_KeyPress(key='{0}')", e.KeyChar);
+                logger.Debug("HookManager_KeyPress(key='{0}')", e.KeyChar);
 
                 if (!(Char.IsDigit(e.KeyChar)) && (e.KeyChar != (char)Keys.Enter) && (e.KeyChar != '/') && (e.KeyChar != '-'))
                 {
-                    barcode = string.Empty;
+                    ResetBarcodeState();
                     return;
                 }
-                else if (e.KeyChar != (char)Keys.Enter)
+
+                if (e.KeyChar != (char)Keys.Enter)
                 {
-                    barcode += e.KeyChar;                    
+                    barcode += e.KeyChar;
                 }
 
-                var patternOrders = @"^7000\d{6}/\d{5}";
-                
-                var parser = new Regex(patternOrders);
-                var match = parser.Match(barcode);
+                resultOperation = false;
+                defineTheSequencePatternBarcode = string.Empty;
 
-                if(match.Success)
+                if (TryMatchConfiguredPatterns(barcode, out string sequence))
                 {
                     resultOperation = true;
-                }
-
-                var patternMaterials = @"^500\d{7}/\d{4}";
-                parser = new Regex(patternMaterials);
-                match = parser.Match(barcode);                    
-
-                if (match.Success)
-                {
-                    resultOperation = true;
-                }
-
-                if(SettingsApplicationModelApplication.PatternRegexList!=null && SettingsApplicationModelApplication.PatternRegexList.Count > 0)
-                {
-                    for (int i = 0; i < SettingsApplicationModelApplication.PatternRegexList.Count; i++)
-                    {
-                        if(!string.IsNullOrEmpty(SettingsApplicationModelApplication.PatternRegexList[i].NamePattern) 
-                            && !string.IsNullOrEmpty(SettingsApplicationModelApplication.PatternRegexList[i].PatternValue))
-                        {
-                            var patternValue = SettingsApplicationModelApplication.PatternRegexList[i].PatternValue;
-
-                            parser = new Regex(patternValue);
-                            match = parser.Match(barcode);
-                                
-                            if (match.Success)
-                            {
-                                resultOperation = true;
-                                defineTheSequencePatternBarcode = SettingsApplicationModelApplication.PatternRegexList[i].DefineTheSequence;
-                            }
-                        }
-                    }
+                    defineTheSequencePatternBarcode = sequence;
                 }
 
                 if (!resultOperation)
                 {
                     if (!string.IsNullOrEmpty(barcode) && barcode.Length > 30)
                     {
-                        barcode = string.Empty;
+                        ResetBarcodeState();
                     }
-                    else if ((e.KeyChar == (char)Keys.Enter))
+                    else if (e.KeyChar == (char)Keys.Enter)
                     {
-                        barcode = string.Empty;
+                        ResetBarcodeState();
                     }
                 }
             }
             catch (Exception ex)
             {
-                logger.Fatal("HookManager_KeyPressNew(ex='{0}')", ex.StackTrace);
+                logger.Fatal(ex, "HookManager_KeyPress failed");
             }
         }
         
@@ -271,24 +267,32 @@ namespace BarcodeScannerSysTrayTool.ApplicationElements
             }
         }
 
+        private static string ExtractQuotedValue(string analyzeSequence, string openQuote, string closeQuote)
+        {
+            int start = analyzeSequence.IndexOf(openQuote, StringComparison.Ordinal);
+            if (start < 0)
+            {
+                return string.Empty;
+            }
+
+            start += openQuote.Length;
+            int end = analyzeSequence.IndexOf(closeQuote, start, StringComparison.Ordinal);
+            if (end < 0 || end <= start)
+            {
+                return string.Empty;
+            }
+
+            return analyzeSequence.Substring(start, end - start);
+        }
+
         private string GetValueFromSequenceFirst(string analyzeSequence)
         {
-            string toFind1 = "\"";
-            string toFind2 = "\"";
-            int start = analyzeSequence.IndexOf(toFind1) + toFind1.Length;
-            int end = analyzeSequence.IndexOf(toFind2, start); //Start after the index of 'my' since 'is' appears twice
-            string stringReturn = analyzeSequence.Substring(start, end - start);
-            return stringReturn;
+            return ExtractQuotedValue(analyzeSequence, "\"", "\"");
         }
 
         private string GetValueFromSequenceSecond(string analyzeSequence)
         {
-            string toFind1 = "“";
-            string toFind2 = "”";
-            int start = analyzeSequence.IndexOf(toFind1) + toFind1.Length;
-            int end = analyzeSequence.IndexOf(toFind2, start); //Start after the index of 'my' since 'is' appears twice
-            string stringReturn = analyzeSequence.Substring(start, end - start);
-            return stringReturn;
+            return ExtractQuotedValue(analyzeSequence, "“", "”");
         }
 
         private void StartSending(string barcodeValue)
@@ -335,14 +339,14 @@ namespace BarcodeScannerSysTrayTool.ApplicationElements
 
                 for (int i = 0; i < listCollection.Count; i++)
                 {
-                    string analyzeSequence = listCollection[i];
-                    if(analyzeSequence.Contains("\""))
+                    string analyzeSequence = listCollection[i].ToUpperInvariant();
+                    if (listCollectionCopy[i].Contains("\""))
                     {
                         analyzeSequence = listCollectionCopy[i];
                         valuesString = GetValueFromSequenceFirst(analyzeSequence);
                         analyzeSequence = "VALUE";
                     }
-                    else if (analyzeSequence.Contains("“"))
+                    else if (listCollectionCopy[i].Contains("“"))
                     {
                         analyzeSequence = listCollectionCopy[i];
                         valuesString = GetValueFromSequenceSecond(analyzeSequence);
@@ -355,10 +359,10 @@ namespace BarcodeScannerSysTrayTool.ApplicationElements
                     AnalyzeDefineTheSequence(analyzeSequence, barcodeValue, valuesString);
                 }
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
-                logger.Fatal("StartSending(ex='{0}')", ex.StackTrace);
-            }            
+                logger.Fatal(ex, "StartSending failed");
+            }
         }
 
         /// <summary>
@@ -366,8 +370,24 @@ namespace BarcodeScannerSysTrayTool.ApplicationElements
         /// </summary>
         public void Dispose()
         {
-            // When the application closes, this will remove the icon from the system tray immediately.
-            notifyIconObject.Dispose();
+            HookManager.KeyPress -= HookManager_KeyPress;
+            HookManager.KeyUp -= HookManager_KeyUp;
+
+            if (settingsForm != null)
+            {
+                settingsForm.SettingsApplicationModelConfirmOk -= SettingsApplicationModel_ConfirmEvent;
+                settingsForm.Dispose();
+                settingsForm = null;
+            }
+
+            if (notifyIconObject != null)
+            {
+                notifyIconObject.MouseClick -= ni_MouseClick;
+                notifyIconObject.ContextMenuStrip?.Dispose();
+                notifyIconObject.Visible = false;
+                notifyIconObject.Dispose();
+                notifyIconObject = null;
+            }
         }
 
         /// <summary>
